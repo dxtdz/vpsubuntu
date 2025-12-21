@@ -1,23 +1,22 @@
 #!/bin/bash
+set -e
 
-echo "[+] User: $(whoami)"
-cd ~
+echo "[+] Starting VNC server"
 
-# clean old vnc
+# kill old session nếu có
 vncserver -kill :1 >/dev/null 2>&1 || true
 
-# start vnc (background)
+# start VNC
 vncserver :1 -geometry 1280x720 -depth 24
 
-# ĐỢI VNC LÊN CỔNG 5901 (CỰC QUAN TRỌNG)
-echo "[+] Waiting for VNC on port 5901..."
-for i in {1..10}; do
-  nc -z localhost 5901 && break
-  sleep 1
-done
+# Render cần delay để VNC mở cổng
+sleep 6
 
-# start noVNC (CHỈ ĐỊNH RÕ DISPLAY)
+echo "[+] Starting noVNC"
+
 cd /noVNC
+
+# chạy foreground để Render không kill container
 exec ./utils/launch.sh \
   --vnc localhost:5901 \
   --listen 6080 \
