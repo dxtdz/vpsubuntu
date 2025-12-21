@@ -3,10 +3,10 @@
 echo "[+] User: $(whoami)"
 cd ~
 
-# kill old vnc if exists
+# kill old VNC if exists
 vncserver -kill :1 >/dev/null 2>&1 || true
 
-# start vnc
+# start VNC
 vncserver :1 -geometry 1280x720 -depth 24
 
 # start noVNC (main process)
