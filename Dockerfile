@@ -1,100 +1,25 @@
-{ pkgs, ... }: {
-  channel = "stable-24.11";
+FROM thuonghai2711/ubuntu-novnc-pulseaudio:22.04
 
-  packages = [
-    pkgs.docker
-    pkgs.cloudflared
-    pkgs.socat
-    pkgs.coreutils
-    pkgs.gnugrep
-    pkgs.sudo
-    pkgs.apt
-    pkgs.docker
-    pkgs.systemd
-    pkgs.unzip
-  ];
+# Cài đặt Chrome
+RUN apt-get update && \
+    apt-get remove -y firefox && \
+    apt-get install -y wget && \
+    wget -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
+    apt-get install -y /tmp/chrome.deb && \
+    rm -f /tmp/chrome.deb
 
-  services.docker.enable = true;
+# Cài đặt cloudflared
+RUN wget -O /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && \
+    chmod +x /usr/local/bin/cloudflared
 
-  idx.workspace.onStart = {
-    novnc = ''
-      set -e
+# Cài đặt socat
+RUN apt-get install -y socat
 
-      # One-time cleanup
-      if [ ! -f /home/user/.cleanup_done ]; then
-        rm -rf /home/user/.gradle/* /home/user/.emu/*
-        find /home/user -mindepth 1 -maxdepth 1 ! -name 'idx-ubuntu22-gui' ! -name '.*' -exec rm -rf {} +
-        touch /home/user/.cleanup_done
-      fi
+# Expose ports
+EXPOSE 10000 5900 6900 1699
 
-      
+# Start script
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
-      # Create the container if missing; otherwise start it
-      if ! docker ps -a --format '{{.Names}}' | grep -qx 'ubuntu-novnc'; then
-        docker run --name ubuntu-novnc \
-          --shm-size 1g -d \
-          --cap-add=SYS_ADMIN \
-          -p 8080:10000 \
-          -e VNC_PASSWD=123456 \
-          -e PORT=10000 \
-          -e AUDIO_PORT=1699 \
-          -e WEBSOCKIFY_PORT=6900 \
-          -e VNC_PORT=5900 \
-          -e SCREEN_WIDTH=1024 \
-          -e SCREEN_HEIGHT=768 \
-          -e SCREEN_DEPTH=24 \
-          thuonghai2711/ubuntu-novnc-pulseaudio:22.04
-      else
-        docker start ubuntu-novnc || true
-      fi
-
-      # Install Chrome inside the container (sudo only here)
-      docker exec -it ubuntu-novnc bash -lc "
-        sudo apt update &&
-        sudo apt remove -y firefox || true &&
-        sudo apt install -y wget &&
-        sudo wget -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb &&
-        sudo apt install -y /tmp/chrome.deb &&
-        sudo rm -f /tmp/chrome.deb
-      "
-
-      # Run cloudflared in background, capture logs
-      nohup cloudflared tunnel --no-autoupdate --url http://localhost:8080 \
-        > /tmp/cloudflared.log 2>&1 &
-
-      # Give it 10s to start
-      sleep 10
-
-      # Extract tunnel URL from logs
-      if grep -q "trycloudflare.com" /tmp/cloudflared.log; then
-        URL=$(grep -o "https://[a-z0-9.-]*trycloudflare.com" /tmp/cloudflared.log | head -n1)
-        echo "========================================="
-        echo " 🌍 Your Cloudflared tunnel is ready:"
-        echo "     $URL"
-        echo "========================================="
-      else
-        echo "❌ Cloudflared tunnel failed, check /tmp/cloudflared.log"
-      fi
-
-      elapsed=0; while true; do echo "Time elapsed: $elapsed min"; ((elapsed++)); sleep 60; done
-
-    '';
-  };
-
-  idx.previews = {
-    enable = true;
-    previews = {
-      novnc = {
-        manager = "web";
-        command = [
-          "bash" "-lc"
-          "socat TCP-LISTEN:$PORT,fork,reuseaddr TCP:127.0.0.1:8080"
-        ];
-      };
-    };
-  };
-}
-
-
-
- 
+CMD ["/start.sh"]
