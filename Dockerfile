@@ -1,48 +1,39 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV HOME=/root
-WORKDIR /root
+ENV DISPLAY=:1
 
-# update
-RUN apt update
-
-# install GUI + VNC + noVNC deps (Render OK)
-RUN apt install -y --no-install-recommends \
+# ---- install packages ----
+RUN apt update && apt install -y \
     xfce4 \
     xfce4-terminal \
     tightvncserver \
     dbus-x11 \
     curl \
+    firefox \
     git \
     wget \
     xz-utils \
-    chromium-browser \
-    fonts-wqy-zenhei \
+    fonts-zenhei \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    --no-install-recommends && \
+    apt clean && rm -rf /var/lib/apt/lists/*
 
-# noVNC
-RUN wget https://github.com/novnc/noVNC/archive/refs/tags/v1.2.0.tar.gz
-RUN tar -xvf v1.2.0.tar.gz
-RUN mv noVNC-1.2.0 /noVNC
-RUN rm v1.2.0.tar.gz
+# ---- noVNC ----
+RUN git clone https://github.com/novnc/noVNC.git /noVNC && \
+    git clone https://github.com/novnc/websockify /noVNC/utils/websockify
 
-# VNC config
-RUN mkdir -p $HOME/.vnc
-RUN echo "xt" | vncpasswd -f > $HOME/.vnc/passwd
-RUN chmod 600 $HOME/.vnc/passwd
+# ---- VNC config ----
+RUN mkdir -p /root/.vnc && \
+    echo "xt" | vncpasswd -f > /root/.vnc/passwd && \
+    chmod 600 /root/.vnc/passwd && \
+    echo '#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nexec dbus-launch xfce4-session &' > /root/.vnc/xstartup && \
+    chmod +x /root/.vnc/xstartup
 
-RUN echo '#!/bin/sh\n\
-unset SESSION_MANAGER\n\
-unset DBUS_SESSION_BUS_ADDRESS\n\
-exec dbus-launch --exit-with-session xfce4-session &' \
-> $HOME/.vnc/xstartup
-RUN chmod +x $HOME/.vnc/xstartup
-
-# run script
+# ---- run script ----
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
 EXPOSE 6080
-CMD ["/run.sh"]
+
+CMD ["/bin/bash", "/run.sh"]
