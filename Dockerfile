@@ -3,19 +3,18 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
 
-# ---- install packages ----
+# ---- base packages ----
 RUN apt update && apt install -y \
     xfce4 \
     xfce4-terminal \
     tightvncserver \
     dbus-x11 \
     curl \
-    firefox \
     git \
     wget \
     xz-utils \
-    fonts-zenhei \
     ca-certificates \
+    net-tools \
     --no-install-recommends && \
     apt clean && rm -rf /var/lib/apt/lists/*
 
