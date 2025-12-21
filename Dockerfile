@@ -1,40 +1,100 @@
-# Sử dụng image Ubuntu noVNC có sẵn
-FROM thuonghai2711/ubuntu-novnc-pulseaudio:22.04
+{ pkgs, ... }: {
+  channel = "stable-24.11";
 
-# Thiết lập các biến môi trường
-ENV VNC_PASSWD=xt
-ENV PORT=10000
-ENV SCREEN_WIDTH=1024
-ENV SCREEN_HEIGHT=768
-ENV SCREEN_DEPTH=24
+  packages = [
+    pkgs.docker
+    pkgs.cloudflared
+    pkgs.socat
+    pkgs.coreutils
+    pkgs.gnugrep
+    pkgs.sudo
+    pkgs.apt
+    pkgs.docker
+    pkgs.systemd
+    pkgs.unzip
+  ];
 
-USER root
+  services.docker.enable = true;
 
-# 1. Cài đặt Google Chrome và Fastfetch (thay cho neofetch)
-RUN apt-get update && apt-get install -y wget gnupg software-properties-common && \
-    wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && \
-    apt-get install -y google-chrome-stable fastfetch && \
-    rm -rf /var/lib/apt/lists/*
+  idx.workspace.onStart = {
+    novnc = ''
+      set -e
 
-# 2. Cài đặt Cloudflared
-RUN wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
-    dpkg -i cloudflared-linux-amd64.deb && \
-    rm cloudflared-linux-amd64.deb
+      # One-time cleanup
+      if [ ! -f /home/user/.cleanup_done ]; then
+        rm -rf /home/user/.gradle/* /home/user/.emu/*
+        find /home/user -mindepth 1 -maxdepth 1 ! -name 'idx-ubuntu22-gui' ! -name '.*' -exec rm -rf {} +
+        touch /home/user/.cleanup_done
+      fi
 
-# 3. Cài đặt Rclone (Để dùng ổ đĩa ảo)
-RUN apt-get update && apt-get install -y rclone fuse3 && rm -rf /var/lib/apt/lists/*
+      
 
-# Mở cổng 10000 cho Render
-EXPOSE 10000
+      # Create the container if missing; otherwise start it
+      if ! docker ps -a --format '{{.Names}}' | grep -qx 'ubuntu-novnc'; then
+        docker run --name ubuntu-novnc \
+          --shm-size 1g -d \
+          --cap-add=SYS_ADMIN \
+          -p 8080:10000 \
+          -e VNC_PASSWD=123456 \
+          -e PORT=10000 \
+          -e AUDIO_PORT=1699 \
+          -e WEBSOCKIFY_PORT=6900 \
+          -e VNC_PORT=5900 \
+          -e SCREEN_WIDTH=1024 \
+          -e SCREEN_HEIGHT=768 \
+          -e SCREEN_DEPTH=24 \
+          thuonghai2711/ubuntu-novnc-pulseaudio:22.04
+      else
+        docker start ubuntu-novnc || true
+      fi
 
-# Lệnh khởi chạy (Dạng Shell - KHÔNG dùng ngoặc vuông để tránh lỗi status 127)
-CMD sed -i '/\[supervisord\]/a user=root' /etc/supervisor/supervisord.conf && \
-    (/usr/bin/supervisord -c /etc/supervisor/supervisord.conf &) && \
-    sleep 10 && \
-    if [ -z "$TUNNEL_TOKEN" ]; then \
-      cloudflared tunnel --no-autoupdate --url http://localhost:80; \
-    else \
-      cloudflared tunnel --no-autoupdate run --token $TUNNEL_TOKEN; \
-    fi
+      # Install Chrome inside the container (sudo only here)
+      docker exec -it ubuntu-novnc bash -lc "
+        sudo apt update &&
+        sudo apt remove -y firefox || true &&
+        sudo apt install -y wget &&
+        sudo wget -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb &&
+        sudo apt install -y /tmp/chrome.deb &&
+        sudo rm -f /tmp/chrome.deb
+      "
+
+      # Run cloudflared in background, capture logs
+      nohup cloudflared tunnel --no-autoupdate --url http://localhost:8080 \
+        > /tmp/cloudflared.log 2>&1 &
+
+      # Give it 10s to start
+      sleep 10
+
+      # Extract tunnel URL from logs
+      if grep -q "trycloudflare.com" /tmp/cloudflared.log; then
+        URL=$(grep -o "https://[a-z0-9.-]*trycloudflare.com" /tmp/cloudflared.log | head -n1)
+        echo "========================================="
+        echo " 🌍 Your Cloudflared tunnel is ready:"
+        echo "     $URL"
+        echo "========================================="
+      else
+        echo "❌ Cloudflared tunnel failed, check /tmp/cloudflared.log"
+      fi
+
+      elapsed=0; while true; do echo "Time elapsed: $elapsed min"; ((elapsed++)); sleep 60; done
+
+    '';
+  };
+
+  idx.previews = {
+    enable = true;
+    previews = {
+      novnc = {
+        manager = "web";
+        command = [
+          "bash" "-lc"
+          "socat TCP-LISTEN:$PORT,fork,reuseaddr TCP:127.0.0.1:8080"
+        ];
+      };
+    };
+  };
+}
+
+
+
+ 
