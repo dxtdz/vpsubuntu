@@ -1,22 +1,20 @@
 #!/bin/bash
 set -e
 
-echo "[+] Starting VNC server"
+echo "[+] Starting VNC"
 
-# kill old session nếu có
+# kill cũ nếu có
 vncserver -kill :1 >/dev/null 2>&1 || true
 
 # start VNC
 vncserver :1 -geometry 1280x720 -depth 24
 
-# Render cần delay để VNC mở cổng
+# chờ VNC lên (Render cần delay)
 sleep 6
 
 echo "[+] Starting noVNC"
 
 cd /noVNC
-
-# chạy foreground để Render không kill container
 exec ./utils/launch.sh \
   --vnc localhost:5901 \
   --listen 6080 \
