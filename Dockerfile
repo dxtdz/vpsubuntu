@@ -1,38 +1,27 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:1
 
-# ---- base packages ----
+# Cập nhật và cài đặt full bộ công cụ bạn cần
 RUN apt update && apt install -y \
-    xfce4 \
-    xfce4-terminal \
-    tightvncserver \
-    dbus-x11 \
-    curl \
-    git \
-    wget \
-    xz-utils \
-    ca-certificates \
-    net-tools \
-    --no-install-recommends && \
-    apt clean && rm -rf /var/lib/apt/lists/*
+    wget curl git xz-utils dbus-x11 \
+    fonts-wqy-zenhei xfce4 xfce4-terminal \
+    tightvncserver openssh-server \
+    firefox-geckodriver \
+    gnome-system-monitor mate-system-monitor \
+    wine wine32 wine64 qemu-kvm \
+    && apt clean
 
-# ---- noVNC ----
-RUN git clone https://github.com/novnc/noVNC.git /noVNC && \
-    git clone https://github.com/novnc/websockify /noVNC/utils/websockify
+# Cài đặt noVNC
+RUN wget https://github.com/novnc/noVNC/archive/refs/tags/v1.2.0.tar.gz \
+    && tar -xvf v1.2.0.tar.gz \
+    && rm v1.2.0.tar.gz
 
-# ---- VNC config ----
-RUN mkdir -p /root/.vnc && \
-    echo "xt" | vncpasswd -f > /root/.vnc/passwd && \
-    chmod 600 /root/.vnc/passwd && \
-    echo '#!/bin/sh\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nexec dbus-launch xfce4-session &' > /root/.vnc/xstartup && \
-    chmod +x /root/.vnc/xstartup
-
-# ---- run script ----
+# Tạo file run.sh trực tiếp trong Dockerfile để tránh lỗi copy
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
-EXPOSE 6080
+# Render sử dụng port động, nhưng mình vẫn EXPOSE để dễ quản lý
+EXPOSE 8900
 
-CMD ["/bin/bash", "/run.sh"]
+CMD ["/run.sh"]
